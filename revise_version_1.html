@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Mortgage Calculator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    input, button {
+      padding: 8px;
+      margin: 5px;
+      font-size: 16px;
+    }
+    #result, #schedule {
+      margin-top: 20px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 6px;
+      text-align: right;
+    }
+    th {
+      background-color: #f4f4f4;
+    }
+    td:first-child, th:first-child {
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>Mortgage Calculator</h2>
+
+  <label>Loan Amount (€): <input type="number" id="loanAmount" /></label><br/>
+  <label>Interest Rate (% annual): <input type="number" id="interestRate" step="0.01" /></label><br/>
+  <label>Loan Term (years): <input type="number" id="loanTerm" /></label><br/>
+  <label>Start Date: <input type="date" id="startDate" /></label><br/>
+  
+  <label>Extra Payment (% of original): <input type="number" id="extraPercent" step="0.01" placeholder="Optional" /></label><br/>
+  <label>Extra Payment Start Date: <input type="date" id="extraStartDate" /></label><br/>
+  
+  <label>Bulk Payment Amount (€): <input type="number" id="bulkPayment" placeholder="Optional" /></label><br/>
+  <label>Bulk Payment Every (years): <input type="number" id="bulkFrequency" placeholder="Optional" /></label><br/>
+
+  <button onclick="calculateMortgage()">Calculate</button>
+
+  <div id="result"></div>
+  <div id="schedule"></div>
+
+  <script>
+    function calculateMortgage() {
+      const loanAmount = parseFloat(document.getElementById("loanAmount").value);
+      const annualInterestRate = parseFloat(document.getElementById("interestRate").value);
+      const loanTermYears = parseInt(document.getElementById("loanTerm").value);
+      const startDateInput = document.getElementById("startDate").value;
+      const extraPercentInput = document.getElementById("extraPercent").value;
+      const extraStartDateInput = document.getElementById("extraStartDate").value;
+
+      const bulkPaymentInput = document.getElementById("bulkPayment").value;
+      const bulkFrequencyInput = document.getElementById("bulkFrequency").value;
+
+      if (!loanAmount || !annualInterestRate || !loanTermYears || !startDateInput) {
+        alert("Please enter all required fields.");
+        return;
+      }
+
+      const startDate = new Date(startDateInput);
+      const monthlyInterestRate = annualInterestRate / 100 / 12;
+      const numberOfPayments = loanTermYears * 12;
+
+      const baseMonthlyPayment = loanAmount * monthlyInterestRate / (1 - Math.pow(1 + monthlyInterestRate, -numberOfPayments));
+
+      const extraPercent = parseFloat(extraPercentInput) || 0;
+      const extraAmount = baseMonthlyPayment * (extraPercent / 100);
+      const extraStartDate = extraStartDateInput ? new Date(extraStartDateInput) : null;
+
+      const bulkAmount = parseFloat(bulkPaymentInput) || 0;
+      const bulkFrequency = parseInt(bulkFrequencyInput) || 0;
+
+      let balance = loanAmount;
+      let months = 0;
+      let totalPaid = 0;
+      let currentDate = new Date(startDate);
+
+      let scheduleHTML = `<table>
+        <tr>
+          <th>Date</th>
+          <th>Payment (€)</th>
+          <th>Interest (€)</th>
+          <th>Principal (€)</th>
+          <th>Remaining Balance (€)</th>
+        </tr>`;
+
+      while (balance > 0) {
+        const isExtraPaymentApplicable = extraStartDate ? currentDate >= extraStartDate : false;
+        const totalMonthlyPayment = baseMonthlyPayment + (isExtraPaymentApplicable ? extraAmount : 0);
+
+        const interest = balance * monthlyInterestRate;
+        const principal = Math.min(totalMonthlyPayment - interest, balance);
+        const payment = interest + principal;
+
+        balance -= principal;
+        totalPaid += payment;
+        months++;
+
+        // Check for bulk payment
+        if (bulkAmount > 0 && bulkFrequency > 0 && months % (bulkFrequency * 12) === 0) {
+          const lump = Math.min(bulkAmount, balance);
+          balance -= lump;
+          totalPaid += lump;
+
+          scheduleHTML += `
+            <tr>
+              <td>${currentDate.toISOString().slice(0, 10)}</td>
+              <td colspan="4" style="text-align:center; background:#ffd;">💰 Bulk Payment: €${lump.toFixed(2)}</td>
+            </tr>`;
+        }
+
+        scheduleHTML += `
+          <tr>
+            <td>${currentDate.toISOString().slice(0, 10)}</td>
+            <td>${payment.toFixed(2)}</td>
+            <td>${interest.toFixed(2)}</td>
+            <td>${principal.toFixed(2)}</td>
+            <td>${balance.toFixed(2)}</td>
+          </tr>`;
+
+        currentDate.setMonth(currentDate.getMonth() + 1);
+      }
+
+      scheduleHTML += "</table>";
+
+      const years = Math.floor(months / 12);
+      const remainingMonths = months % 12;
+
+      const endDate = new Date(currentDate);
+      endDate.setMonth(endDate.getMonth() - 1);
+      const endDateFormatted = endDate.toISOString().slice(0, 10);
+
+      // Calculate total payments
+      const totalOriginalPayments = baseMonthlyPayment * numberOfPayments;
+      const totalExtraPayments = extraPercent > 0 ? (baseMonthlyPayment + extraAmount) * months : totalOriginalPayments;
+      const totalBulkPayments = totalPaid; // Total paid after bulk payments
+
+      // Displaying results
+      document.getElementById("result").innerHTML = `
+        <strong>Original Monthly Payment:</strong> €${baseMonthlyPayment.toFixed(2)}<br/>
+        <strong>Extra Payment:</strong> €${extraAmount.toFixed(2)} (${extraPercent}% of original)<br/>
+        ${extraStartDate ? `<strong>Extra Payment Starts On:</strong> ${extraStartDate.toISOString().slice(0, 10)}<br/>` : ''}
+        ${bulkAmount > 0 ? `<strong>Bulk Payment:</strong> €${bulkAmount.toFixed(2)} every ${bulkFrequency} year(s)<br/>` : ''}
+        <strong>Total Paid:</strong> €${totalPaid.toFixed(2)}<br/>
+        <strong>Loan Paid Off In:</strong> ${years} years and ${remainingMonths} months<br/>
+        <strong>Loan End Date:</strong> ${endDateFormatted}<br/><br/>
+        <strong>Difference Between Payments:</strong><br/>
+        <strong>Original Total Payments:</strong> €${totalOriginalPayments.toFixed(2)}<br/>
+        <strong>Total Payments With Extra & Bulk Payments:</strong> €${totalBulkPayments.toFixed(2)}<br/>
+        <strong>Difference (Extra + Bulk Payments):</strong> €${(totalBulkPayments - totalOriginalPayments).toFixed(2)}
+      `;
+
+      document.getElementById("schedule").innerHTML = scheduleHTML;
+    }
+  </script>
+</body>
+</html>
